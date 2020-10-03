@@ -1,0 +1,16 @@
+[package]
+name = "pom"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+chrono = "0.4.15"
+clap = "2.33.3"
+humantime = "2.0.1"
+indicatif = "0.15.0"
+log = "0.4.11"
+rodio = "0.11.0"
+simple-logging = "2.0.2"
+# notifications currently not working due to windows update
+#notifica = "2.0.0"
+#winrt-notification = "0.2.2"
