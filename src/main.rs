@@ -2,8 +2,11 @@ use chrono::Local;
 use humantime::format_duration;
 use indicatif::{HumanDuration, ProgressBar, ProgressStyle};
 use log::{info, LevelFilter};
+use serde::{Deserialize, Serialize};
+use serde_json;
 use simple_logging;
 use std::env;
+use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -11,10 +14,17 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 const LOGFILE_NAME: &str = "pomodoros.log";
+const STATEFILE_NAME: &str = ".rusty_pom";
+
+#[derive(Serialize, Deserialize)]
+struct SavedState {
+    seconds_remaining: u64,
+}
 
 struct App<'a> {
     test_mode: bool,
     ctrl_pressed: &'a AtomicBool,
+    saved_state: &'a SavedState,
 }
 
 impl App<'_> {
@@ -31,6 +41,15 @@ impl App<'_> {
 
         sink.append(rodio::source::SineWave::new(440));
         std::thread::sleep(duration);
+    }
+
+    fn save_state(secs_remaining: u64) {
+        let mut output = File::create(STATEFILE_NAME).expect("cannot create state file");
+        let state = SavedState {
+            seconds_remaining: secs_remaining,
+        };
+        write!(output, "{}", &serde_json::to_string(&state).unwrap())
+            .expect("error writing to state file");
     }
 
     fn run_timer(&self) {
@@ -75,13 +94,17 @@ impl App<'_> {
         bar.finish_and_clear();
 
         if was_interrupted {
+            let time_remaining = timer_duration - start.elapsed();
+
             _info_and_print(&format!(
                 "Interrupted at {} with {} remaining.",
                 Local::now().format("%H:%M:%S"),
-                HumanDuration(timer_duration - start.elapsed())
+                HumanDuration(time_remaining)
             ));
+            App::save_state(time_remaining.as_secs());
         } else {
             _info_and_print(&format!("Finished at {}", Local::now().format("%H:%M:%S")));
+            App::save_state(0);
         }
 
         io::stdout().flush().unwrap();
@@ -104,6 +127,18 @@ impl App<'_> {
 
 /// Configure logging, initialize the app, and run it.
 fn main() {
+    fn get_saved_state(state: &mut SavedState) {
+        let input = File::open(STATEFILE_NAME);
+
+        let temp_state: SavedState = match input {
+            Ok(input) => serde_json::from_reader(input).expect("error while reading json"),
+            Err(_e) => SavedState {
+                seconds_remaining: 0,
+            },
+        };
+        state.seconds_remaining = temp_state.seconds_remaining;
+    }
+
     simple_logging::log_to(
         OpenOptions::new()
             .create(true)
@@ -121,9 +156,15 @@ fn main() {
     })
     .expect("Error setting Ctrl-C handler");
 
+    let mut last_state = SavedState {
+        seconds_remaining: 0,
+    };
+    get_saved_state(&mut last_state);
+
     let mut app = App {
         test_mode: false,
         ctrl_pressed: &irq,
+        saved_state: &last_state,
     };
 
     app.run();
