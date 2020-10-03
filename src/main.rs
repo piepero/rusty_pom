@@ -12,14 +12,15 @@ use std::time::{Duration, Instant};
 
 const LOGFILE_NAME: &str = "pomodoros.log";
 
-struct App {
+struct App<'a> {
     test_mode: bool,
+    ctrl_pressed: &'a AtomicBool,
 }
 
-impl App {
-    fn run(&mut self, interrupted: &AtomicBool) {
+impl App<'_> {
+    fn run(&mut self) {
         self.read_args();
-        self.run_timer(interrupted);
+        self.run_timer();
     }
 
     fn play_sound(duration: Duration) {
@@ -32,7 +33,7 @@ impl App {
         std::thread::sleep(duration);
     }
 
-    fn run_timer(&self, interrupted: &AtomicBool) {
+    fn run_timer(&self) {
         fn _info_and_print(msg: &String) {
             info!("{}", msg);
             println!("{}", msg);
@@ -66,7 +67,7 @@ impl App {
         while (start.elapsed() < timer_duration) && !was_interrupted {
             std::thread::sleep(one_second);
             bar.inc(1);
-            if interrupted.load(Ordering::SeqCst) {
+            if self.ctrl_pressed.load(Ordering::SeqCst) {
                 was_interrupted = true;
             }
         }
@@ -120,7 +121,10 @@ fn main() {
     })
     .expect("Error setting Ctrl-C handler");
 
-    let mut app = App { test_mode: false };
+    let mut app = App {
+        test_mode: false,
+        ctrl_pressed: &irq,
+    };
 
-    app.run(&irq);
+    app.run();
 }
