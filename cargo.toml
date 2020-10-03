@@ -11,6 +11,7 @@ indicatif = "0.15.0"
 log = "0.4.11"
 rodio = "0.11.0"
 simple-logging = "2.0.2"
+ctrlc = "3.1.6"
 # notifications currently not working due to windows update
 #notifica = "2.0.0"
 #winrt-notification = "0.2.2"
