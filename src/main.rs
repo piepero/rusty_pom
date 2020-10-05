@@ -22,7 +22,8 @@ struct SavedState {
 }
 
 struct App<'a> {
-    test_mode: bool,
+    arg_test_mode: bool,
+    arg_restart: bool,
     ctrl_pressed: &'a AtomicBool,
     saved_state: &'a SavedState,
 }
@@ -60,11 +61,20 @@ impl App<'_> {
 
         let timer_duration: Duration;
         let mut was_interrupted: bool = false;
+        let mut was_continued: bool = false;
+        let mut symbol = "🍅";
 
-        if self.test_mode {
+        if self.arg_test_mode {
+            // only 6 second "pomodoros" in test mode; long enough to interrupt, short enough to let it finish
             timer_duration = Duration::from_secs(6);
         } else {
-            timer_duration = chrono::Duration::minutes(25).to_std().unwrap();
+            if (self.saved_state.seconds_remaining > 0) && !self.arg_restart {
+                timer_duration = Duration::from_secs(self.saved_state.seconds_remaining);
+                was_continued = true;
+                symbol = "🍏";
+            } else {
+                timer_duration = Duration::from_secs(25 * 60);
+            }
         }
 
         let bar = ProgressBar::new(timer_duration.as_secs());
@@ -74,15 +84,23 @@ impl App<'_> {
                 .progress_chars("██ ")
                 .tick_chars("🔴⚪ "),
         );
-        bar.set_message("🍅");
+        bar.set_message(symbol);
 
         let one_second = Duration::from_secs(1);
         let start = Instant::now();
+
         info!(
-            "🍅 Starting {} Pomodoro on {}",
+            "{} {} {} Pomodoro on {}",
+            symbol,
+            if was_continued {
+                "Continuing"
+            } else {
+                "Starting new"
+            },
             format_duration(timer_duration),
             Local::now().format("%A, %v at %H:%M:%S")
         );
+
         while (start.elapsed() < timer_duration) && !was_interrupted {
             std::thread::sleep(one_second);
             bar.inc(1);
@@ -118,10 +136,12 @@ impl App<'_> {
     }
 
     fn read_args(&mut self) {
+        // TODO: use crate for proper argument handling
         let args: Vec<String> = env::args().collect();
         // println!("Args: {:?}", args);
 
-        self.test_mode = args.contains(&"--test".to_string());
+        self.arg_test_mode = args.contains(&"--test".to_string());
+        self.arg_restart = args.contains(&"--restart".to_string());
     }
 }
 
@@ -162,7 +182,8 @@ fn main() {
     get_saved_state(&mut last_state);
 
     let mut app = App {
-        test_mode: false,
+        arg_test_mode: false,
+        arg_restart: false,
         ctrl_pressed: &irq,
         saved_state: &last_state,
     };
