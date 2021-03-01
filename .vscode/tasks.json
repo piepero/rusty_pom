@@ -3,23 +3,13 @@
   "tasks": [
     {
       "type": "cargo",
-      "subcommand": "build",
+      "command": "build",
       "problemMatcher": ["$rustc"],
       "group": {
         "kind": "build",
         "isDefault": true
       },
-      "label": "Rust: cargo build - RustyStuff"
-    },
-    {
-      "type": "cargo",
-      "subcommand": "test",
-      "problemMatcher": ["$rustc"],
-      "group": {
-        "kind": "test",
-        "isDefault": true
-      },
-      "label": "Rust: cargo test - RustyStuff"
+      "label": "rust: cargo build"
     }
   ]
 }

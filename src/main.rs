@@ -1,10 +1,12 @@
+extern crate winrt_notification;
+
 use chrono::Local;
+use clap::{crate_authors, crate_description, crate_name, crate_version, App, Arg};
 use humantime::format_duration;
 use indicatif::{HumanDuration, ProgressBar, ProgressStyle};
 use log::{info, LevelFilter};
 use serde::{Deserialize, Serialize};
-use serde_json;
-use simple_logging;
+use std::convert::TryFrom;
 use std::env;
 use std::fs::File;
 use std::fs::OpenOptions;
@@ -12,6 +14,7 @@ use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use winrt_notification::{Duration as WinRtDuration, Sound, Toast};
 
 const LOGFILE_NAME: &str = "pomodoros.log";
 const STATEFILE_NAME: &str = ".rusty_pom";
@@ -21,27 +24,16 @@ struct SavedState {
     seconds_remaining: u64,
 }
 
-struct App<'a> {
-    arg_test_mode: bool,
+struct PomApp<'a> {
     arg_restart: bool,
+    arg_duration: i32,
     ctrl_pressed: &'a AtomicBool,
     saved_state: &'a SavedState,
 }
 
-impl App<'_> {
+impl PomApp<'_> {
     fn run(&mut self) {
-        self.read_args();
         self.run_timer();
-    }
-
-    fn play_sound(duration: Duration) {
-        use rodio::Sink;
-
-        let device = rodio::default_output_device().unwrap();
-        let sink = Sink::new(&device);
-
-        sink.append(rodio::source::SineWave::new(440));
-        std::thread::sleep(duration);
     }
 
     fn save_state(secs_remaining: u64) {
@@ -54,7 +46,7 @@ impl App<'_> {
     }
 
     fn run_timer(&self) {
-        fn _info_and_print(msg: &String) {
+        fn _info_and_print(msg: &str) {
             info!("{}", msg);
             println!("{}", msg);
         }
@@ -64,17 +56,14 @@ impl App<'_> {
         let mut was_continued: bool = false;
         let mut symbol = "🍅";
 
-        if self.arg_test_mode {
-            // only 6 second "pomodoros" in test mode; long enough to interrupt, short enough to let it finish
-            timer_duration = Duration::from_secs(6);
+        if (self.saved_state.seconds_remaining > 0) && !self.arg_restart {
+            timer_duration = Duration::from_secs(self.saved_state.seconds_remaining);
+            was_continued = true;
+            symbol = "🍏";
+        } else if self.arg_duration > 0 {
+            timer_duration = Duration::from_secs(u64::try_from(self.arg_duration).unwrap() * 60)
         } else {
-            if (self.saved_state.seconds_remaining > 0) && !self.arg_restart {
-                timer_duration = Duration::from_secs(self.saved_state.seconds_remaining);
-                was_continued = true;
-                symbol = "🍏";
-            } else {
-                timer_duration = Duration::from_secs(25 * 60);
-            }
+            timer_duration = Duration::from_secs(u64::try_from(-self.arg_duration).unwrap())
         }
 
         let bar = ProgressBar::new(timer_duration.as_secs());
@@ -119,29 +108,23 @@ impl App<'_> {
                 Local::now().format("%H:%M:%S"),
                 HumanDuration(time_remaining)
             ));
-            App::save_state(time_remaining.as_secs());
+            PomApp::save_state(time_remaining.as_secs());
         } else {
             _info_and_print(&format!("Finished at {}", Local::now().format("%H:%M:%S")));
-            App::save_state(0);
+            PomApp::save_state(0);
         }
 
         io::stdout().flush().unwrap();
 
         if !was_interrupted {
-            // two beeps with a pause, to let my speaker wake up ...
-            App::play_sound(one_second);
-            std::thread::sleep(one_second);
-            App::play_sound(one_second);
+            Toast::new(Toast::POWERSHELL_APP_ID)
+                .title("Pomodoro finished!")
+                .text1("Your pomodoro has finished.")
+                .sound(Some(Sound::Reminder))
+                .duration(WinRtDuration::Short)
+                .show()
+                .expect("unable to toast");
         }
-    }
-
-    fn read_args(&mut self) {
-        // TODO: use crate for proper argument handling
-        let args: Vec<String> = env::args().collect();
-        // println!("Args: {:?}", args);
-
-        self.arg_test_mode = args.contains(&"--test".to_string());
-        self.arg_restart = args.contains(&"--restart".to_string());
     }
 }
 
@@ -181,9 +164,36 @@ fn main() {
     };
     get_saved_state(&mut last_state);
 
-    let mut app = App {
-        arg_test_mode: false,
-        arg_restart: false,
+    let matches = App::new(crate_name!())
+        .version(crate_version!())
+        .author(crate_authors!())
+        .about(crate_description!())
+        .arg(
+            Arg::new("duration")
+                .short('d')
+                .long("duration")
+                .about("Duration in minutes, defaults to 25")
+                .takes_value(true)
+                .allow_hyphen_values(true),
+        )
+        .arg(
+            Arg::new("restart")
+                .short('r')
+                .long("restart")
+                .about("Restart a new pomodoro"),
+        )
+        .get_matches();
+
+    let duration: i32 = matches
+        .value_of("duration")
+        .unwrap_or("25")
+        .parse()
+        .unwrap();
+    println!("Value for duration: {}", duration);
+
+    let mut app: PomApp = PomApp {
+        arg_restart: matches.is_present("restart"),
+        arg_duration: duration,
         ctrl_pressed: &irq,
         saved_state: &last_state,
     };
