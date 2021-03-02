@@ -189,7 +189,6 @@ fn main() {
         .unwrap_or("25")
         .parse()
         .unwrap();
-    println!("Value for duration: {}", duration);
 
     let mut app: PomApp = PomApp {
         arg_restart: matches.is_present("restart"),
