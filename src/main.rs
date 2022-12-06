@@ -79,7 +79,7 @@ impl PomApp<'_> {
         let start = Instant::now();
 
         info!(
-            "{} {} {} Pomodoro on {}",
+            "{} {} {} Pomodoro {}{}",
             symbol,
             if was_continued {
                 "Continuing"
@@ -87,6 +87,7 @@ impl PomApp<'_> {
                 "Starting new"
             },
             format_duration(timer_duration),
+            if was_continued { "" } else { "on " },
             Local::now().format("%A, %v at %H:%M:%S")
         );
 

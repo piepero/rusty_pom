@@ -1,6 +1,6 @@
 [package]
 name = "pom"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Oliver Pieper <pieper@viaregio.de>"]
 description = "A simple pomodoro timer written in Rust."
 edition = "2018"
